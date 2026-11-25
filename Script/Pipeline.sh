@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#path
 
 
 #Demultiplex les code bar
