@@ -122,4 +122,5 @@ bcftools call -mv variants.bcf > variants.vcf
 
 
 #SnpEff, annotation du génome
-
+snpEff databases | grep -i glycine
+snpEff -v -stats variants.snpeff.html DATABASE_ID variants.vcf > variants.ann.vcf
