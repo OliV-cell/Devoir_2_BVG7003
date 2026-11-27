@@ -8,7 +8,7 @@ The pipeline executes the following steps in order:
 2. **Demultiplexing (`Sabre`):** Splits pooled sequencing reads into individual sample `.fq` files using a barcode file.
 3. **Trimming & Filtering (`Cutadapt`):** Removes adapter sequences (`AGATCGGAA`), trims low-quality 3' bases (`-q 20`), and discards reads shorter than 50 bp (`-m 50`).
 4. **Post-Trimming Quality Control (`FastQC`):** Re-evaluates read quality after trimming to verify adapter removal and quality improvement.
-5. **Reference Alignment (`BWA`):** Indexes the reference genome (`bwa index`) and aligns trimmed reads (`bwa mem`) to produce SAM files.
+5. **Reference Alignment (`BWA`):** Indexes the reference genome (`bwa index`, if not already indexed) and aligns trimmed reads (`bwa mem`) to produce SAM files.
 6. **BAM Post-Processing (`SAMtools`):** Converts SAM to BAM, sorts alignments by genomic coordinates, and indexes the sorted BAM files.
 7. **Variant Calling (`BCFtools`):** Computes genotype likelihoods (`bcftools mpileup`) and calls SNPs and indels (`bcftools call -mv`) to generate a VCF file.
 8. **Functional Annotation (`SnpEff` - Bonus):** Downloads the specified genome database and annotates called variants with predicted functional effects.
@@ -21,13 +21,21 @@ The pipeline executes the following steps in order:
 ```text
 .
 ├── Script/
-│   └── Pipeline.sh      # Main automated variant calling script
+│   └── Pipeline.sh           # Main automated variant calling script
 ├── Tools/
 │   └── Tools_installation.md # Tool & Sabre installation instructions
 ├── input_data/
-│   └── GBS_data/        # Input files (FASTQ, barcodes)
-├── README.md            # Project documentation and usage guide
-└── results/             # Output directory (created automatically when run)
+│   └── GBS_data/             # Input files (FASTQ, barcodes)
+├── output/                   # Intermediate files (created automatically when run)
+│   ├── demux/                # Demultiplexed .fq files
+│   ├── trimmed/              # Cutadapt-trimmed .fastq files
+│   ├── sam/                  # Raw BWA .sam alignments
+│   └── bam/                  # Converted, sorted, and indexed .bam files
+├── results/                  # Final outputs (created automatically when run)
+│   ├── fastqc_raw/           # FastQC reports on raw reads
+│   └── fastqc_trimmed/       # FastQC reports on trimmed reads
+├── README.md                 # Project documentation and usage guide
+└── pipeline.log              # Example execution log
 ```
 
 ---
@@ -35,34 +43,41 @@ The pipeline executes the following steps in order:
 ## 3. Input and Output Formats
 
 ### Required Inputs
-* **Raw sequencing reads (`.fq.gz` or `.fastq.gz`):** Single-end raw FASTQ file.
-* **Reference genome (`.fa` or `.fasta`):** Reference genome sequence.
-* **Barcodes file (`.txt`):** Tab-delimited file mapping sample barcodes to output `.fq` filenames (standard `sabre se` format).
+- **Raw sequencing reads (`.fq.gz` or `.fastq.gz`):** Single-end raw FASTQ file.
+- **Reference genome (`.fa` or `.fasta`):** Reference genome sequence.
+- **Barcodes file (`.txt`):** Tab-delimited file mapping sample barcodes to output `.fq` filenames (standard `sabre se` format).
 
-### Generated Outputs (in `results/`)
+### Generated Outputs
+
+**Final results (in `results/`):**
 | File(s) | Tool | Description |
 |---|---|---|
-| `*_fastqc.html`, `*_fastqc.zip` | FastQC | Quality reports before and after trimming |
-| `unknown.fq` | Sabre | Reads whose barcodes did not match any sample |
-| `*.fastq` | Cutadapt | Adapter-trimmed and quality-filtered reads |
-| `*.sam` | BWA | Raw sequence alignments |
-| `*.bam`, `*.sort.bam`, `*.sort.bam.bai` | SAMtools | Binary, coordinate-sorted, and indexed alignments |
-| `variants.bcf` | BCFtools | Binary call format file from `mpileup` |
+| `fastqc_raw/*_fastqc.html`, `.zip` | FastQC | Quality reports on raw reads |
+| `fastqc_trimmed/*_fastqc.html`, `.zip` | FastQC | Quality reports on trimmed reads |
 | `variants.vcf` | BCFtools | Final called SNPs and indels |
 | `variants.ann.vcf`, `snpeff.html` | SnpEff | Annotated VCF and HTML summary report |
+
+**Intermediate files (in `output/`):**
+| File(s) | Tool | Description |
+|---|---|---|
+| `demux/*.fq`, `unknown.fq` | Sabre | Demultiplexed sample reads and unmatched reads |
+| `trimmed/*.fastq` | Cutadapt | Adapter-trimmed and quality-filtered reads |
+| `sam/*.sam` | BWA | Raw sequence alignments |
+| `bam/*.bam`, `*.sort.bam`, `*.sort.bam.bai` | SAMtools | Binary, coordinate-sorted, and indexed alignments |
+| `variants.bcf` | BCFtools | Binary call format file from `mpileup` |
 
 ---
 
 ## 4. Dependencies and Installation
 
 All bioinformatics tools are managed inside a single Conda environment named **`devoir_2`**:
-* `fastqc`
-* `sabre`
-* `cutadapt`
-* `bwa`
-* `samtools`
-* `bcftools`
-* `snpeff`
+- `fastqc`
+- `sabre`
+- `cutadapt`
+- `bwa`
+- `samtools`
+- `bcftools`
+- `snpeff`
 
 ### Installation Steps
 1. **Clone the repository:**
@@ -87,7 +102,7 @@ All bioinformatics tools are managed inside a single Conda environment named **`
 
 ## 5. How to Run the Pipeline
 
-Run the script from the root of the repository using **relative paths** for your three input files (an optional 4th argument can specify a custom path to `sabre` if not in `devoir_2` or `Tools/sabre/sabre`):
+Run the script from the root of the repository using **relative paths** for your input files (pass a 4th argument if `sabre` is not in your `$PATH`):
 
 ```bash
 ./Script/Pipeline.sh <path/to/reads.fq.gz> <path/to/reference.fa> <path/to/barcodes.txt> [path/to/sabre]
@@ -95,15 +110,15 @@ Run the script from the root of the repository using **relative paths** for your
 
 ### Example (Test Dataset)
 ```bash
-./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt
+./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt Tools/sabre/sabre
 ```
 
-CPU thread allocation is automatically set to one-third of detected system cores (minimum `1`).
+CPU thread allocation is automatically set to **half of detected system cores** (`NB_CPU / 2`, minimum `1`).
 
 ### Adapting to Another Dataset
 To run the pipeline on a different organism or sequencing kit:
-* Pass your new FASTQ, reference FASTA, and barcode files as the three command-line arguments.
-* If your dataset uses a different adapter sequence or organism database, update the `ADAPTER` and `SNPEFF_DB` variables at the top of `Script/Pipeline.sh`.
+- Pass your new FASTQ, reference FASTA, and barcode files as the command-line arguments.
+- If your dataset uses a different adapter sequence or organism database, update the `ADAPTER` and `SNPEFF_DB` variables at the top of `Script/Pipeline.sh`.
 
 ---
 
@@ -113,11 +128,13 @@ To run the pipeline on a different organism or sequencing kit:
 The script uses `set -euo pipefail`, meaning it will **stop immediately** if any command fails so that corrupted files are not passed to downstream steps. To save a complete record of both standard output and error messages to a log file (`pipeline.log`), run the script with `tee`:
 
 ```bash
-./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt 2>&1 | tee pipeline.log
+./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt Tools/sabre/sabre 2>&1 | tee pipeline.log
 ```
 
 ### Quick Troubleshooting
-* **Conda environment error:** Verify that the environment exists and is named exactly `devoir_2` by running `conda env list`.
-* **Sabre not found:** Build `sabre` in `Tools/sabre` (see `Tools/Tools_installation.md`) or pass its binary path as the 4th argument.
-* **SnpEff command not found:** The script automatically checks both `snpEff` and `snpeff` in the `devoir_2` environment.
-* **Empty VCF file:** Check alignment rates using `conda run -n devoir_2 samtools flagstat results/<sample>.sort.bam` to confirm reads mapped to the reference genome.
+- **Conda environment error:** Verify that the environment exists and is named exactly `devoir_2` by running `conda env list`.
+- **Sabre not found:** Build `sabre` in `Tools/sabre` (see `Tools/Tools_installation.md`) and pass `Tools/sabre/sabre` as the 4th argument.
+- **SnpEff command not found:** `Pipeline.sh` calls `snpEff` (capital `E`). Depending on your Conda build, the binary may be lowercase (`snpeff`); check with `conda run -n devoir_2 which snpEff snpeff`.
+- **Empty VCF file:** Check alignment rates using `conda run -n devoir_2 samtools flagstat output/bam/<sample>.sort.bam` to confirm reads mapped to the reference genome.
+
+For step-by-step descriptions, expected warnings, and detailed troubleshooting, see the repository **Wiki**.
