@@ -2,14 +2,29 @@
 set -euo pipefail
 
 # Choix du nombre de CPU
-while true; do
-	printf "Quel nombre de CPU voulez-vous utiliser?: " >/dev/tty
-	read -r rep </dev/tty || exit 1
-	case "$rep" in  
-		[1-9]|[1-9][0-9]*) CPU="$rep"; break ;;
-		*) echo "Veuillez entrer un nombre de CPU valide" >/dev/tty ;;
-	esac
-done
+get_cpu_count() {
+    if command -v nproc >/dev/null 2>&1; then
+        # Linux et Windows (Git Bash / MSYS2 / WSL)
+        nproc
+    elif command -v sysctl >/dev/null 2>&1; then
+        # macOS (et FreeBSD)
+        sysctl -n hw.ncpu
+    elif [ -n "$NUMBER_OF_PROCESSORS" ]; then
+        # Fallback natif Windows si nproc est absent
+        echo "$NUMBER_OF_PROCESSORS"
+    else
+        # Valeur par défaut de sécurité
+        echo 1
+    fi
+}
+
+NB_CPU=$(get_cpu_count)
+CPU=$(( NB_CPU / 3 ))
+if (( CPU < 1 )); then
+    CPU=1
+fi
+echo "Nombre de CPU détectés : $NB_CPU"
+echo "Nombre de CPU utilisés pour l'analyse : $CPU"
 
 # Entrées (passées en arguments après le nom du script lors de l'exécution)
 # Exemple : ./Pipeline.sh data/reads.fq.gz ref/genome.fa data/barcodes.txt /chemin/vers/sabre
