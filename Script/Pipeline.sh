@@ -1,11 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-#path
-DATA_dir=~/input_data/GBS_data
-REF=/home/dator/refgenome/Gmax_275_v2.0.fa
-OUT=variantcalling
-
 #choix du nombre de CPU
 
 while true; do
@@ -17,74 +12,51 @@ while true; do
 	esac
 done
 
-#FASTQ, traitement de qualiter des séquences pre_adaptateur
-conda run -n devoir_2 fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz -o ~/output_data/fastqc_output
+#!/bin/bash
 
-# Vérification des 2 arguments obligatoires : FASTQ et Génome de référence
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <reads.fq.gz> <ref.fa> [barcodes.txt] [snpeff_db] [adaptateur]"
-    exit 1
-fi
+# Inputs (typed after the script name when you run it)
+# Example: ./pipeline.sh data/reads.fq.gz ref/genome.fa data/barcodes.txt
+FASTQ=$1
+REF=$2
+BARCODES=$3
+ADAPTER="AGATCGGAA"
+SNPEFF_DB="Glycine_max"
 
-# Paramètres (chemins relatifs et valeurs par défaut flexibles)
-FASTQ="$1"
-REF="$2"
-BARCODES="${3:-}"
-SNPEFF_DB="${4:-}"
-ADAPTER="${5:-AGATCGGAAGAGC}"
-OUT="results"
-CPU=4
+# Create a folder for all results
+mkdir -p results
 
-# Création des dossiers de sortie
-mkdir -p "$OUT"/{qc,demux,trimmed,bam,vcf,logs}
+# 1. Quality control on raw reads
+fastqc $FASTQ -o results
 
-# 1. Contrôle de qualité (QC) des données brutes
-fastqc -t "$CPU" -o "$OUT/qc" "$FASTQ" &> "$OUT/logs/1_fastqc_raw.log"
+# 2. Demultiplex barcodes (creates .fq files in the current folder)
+sabre se -f $FASTQ -b $BARCODES -u results/unknown.fq
 
-# 2. Démultiplexage (si fichier de codes-barres fourni) + Découpage/Filtrage
-if [[ -n "$BARCODES" ]]; then
-    (cd "$OUT/demux" && sabre se -f "$(realpath "$FASTQ")" -b "$(realpath "$BARCODES")" -u unk.fq) &> "$OUT/logs/2_sabre.log"
-    INPUTS=("$OUT"/demux/*.fq)
-else
-    INPUTS=("$FASTQ")
-fi
+# 3. Cut adapters and filter low-quality/short reads
+for file in *.fq; do
+    cutadapt -a $ADAPTER -q 20 -m 50 -o results/$file.fastq $file
+done
 
-#Demultiplex les code bar
-exec &> sabre.log
+# 4. Quality control after trimming
+fastqc results/*.fastq -o results
 
-conda run -n ngs_gbs sabre se -f "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/FC20150701_1.fq.gz" -b "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/FC20150701_1.txt" -u "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/unk.fastq"
-	
-#Coupe les adpatateur et code bar
-cd NGS
-ADAP=AGATCGGAA 
-exec &> cutadapt.log
-parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed 's/.fq//')
-	if [ $? -ne 0 ]
-		then
-			printf There is error in the cutadapt
-			exit 1
-	fi
+# 5. Index reference genome and align reads (BWA)
+bwa index $REF
 
-parallel -j "$CPU" "cutadapt -a $ADAPTER -q 20 -m 50 -o $OUT/trimmed/{/.}.fastq {}" ::: "${INPUTS[@]}" &> "$OUT/logs/2_cutadapt.log"
-fastqc -t "$CPU" -o "$OUT/qc" "$OUT"/trimmed/*.fastq &> "$OUT/logs/2_fastqc_trimmed.log"
+for file in results/*.fastq; do
+    bwa mem $REF $file > $file.sam
+done
 
-# 3 & 4. Indexation (si absente), Alignement (BWA) et Post-traitement (SAMtools)
-[[ ! -f "${REF}.bwt" ]] && bwa index "$REF" &> "$OUT/logs/3_bwa_index.log"
-[[ ! -f "${REF}.fai" ]] && samtools faidx "$REF"
+# 6. Convert SAM to BAM, sort, and index (SAMtools)
+for file in results/*.sam; do
+    samtools view -bS $file > $file.bam
+    samtools sort $file.bam -o $file.sort.bam
+    samtools index $file.sort.bam
+done
 
-parallel -j "$CPU" \
-    "bwa mem -t 2 $REF {} | samtools sort -o $OUT/bam/{/.}.bam - && samtools index $OUT/bam/{/.}.bam" \
-    ::: "$OUT"/trimmed/*.fastq &> "$OUT/logs/3_align_sort.log"
+# 7. Call variants (BCFtools)
+bcftools mpileup -Ob -f $REF results/*.sort.bam > results/variants.bcf
+bcftools call -mv -Ov results/variants.bcf > results/variants.vcf
 
-# 5. Appel de variants (BCFtools)
-bcftools mpileup -Ou -f "$REF" "$OUT"/bam/*.bam 2> "$OUT/logs/5_mpileup.log" | \
-    bcftools call -mv -Ov -o "$OUT/vcf/variants.vcf" 2> "$OUT/logs/5_call.log"
-
-# 6. Annotation fonctionnelle (SnpEff - bonus optionnel)
-if [[ -n "$SNPEFF_DB" ]]; then
-    snpEff download "$SNPEFF_DB" &> "$OUT/logs/6_snpeff_dl.log" || true
-    snpEff -stats "$OUT/vcf/snpeff.html" "$SNPEFF_DB" "$OUT/vcf/variants.vcf" \
-        > "$OUT/vcf/variants.ann.vcf" 2> "$OUT/logs/6_snpeff.log"
-fi
-
-echo "Terminé ! Fichiers générés dans : $OUT/"
+# 8. Annotate variants (SnpEff - Bonus)
+snpEff download $SNPEFF_DB
+snpEff -stats results/snpeff.html $SNPEFF_DB results/variants.vcf > results/variants.ann.vcf
