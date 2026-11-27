@@ -9,7 +9,7 @@ get_cpu_count() {
     elif command -v sysctl >/dev/null 2>&1; then
         # macOS (et FreeBSD)
         sysctl -n hw.ncpu
-    elif [ -n "$NUMBER_OF_PROCESSORS" ]; then
+    elif [[ -n "${NUMBER_OF_PROCESSORS:-}" ]]; then
         # Fallback natif Windows si nproc est absent
         echo "$NUMBER_OF_PROCESSORS"
     else
@@ -42,17 +42,21 @@ SABRE=$4
 ADAPTER="AGATCGGAA"
 SNPEFF_DB="Glycine_max"
 
-Rep_dir=$(pwd)
+Rep_dir="$(pwd)"
+RESULTS_DIR="${Rep_dir}/results"
+DEMUX_DIR="${RESULTS_DIR}/demux"
 
-# Créer un dossier pour tous les résultats
-mkdir -p ${Rep_dir}/results
+# Créer les dossiers pour tous les résultats
+mkdir -p "${RESULTS_DIR}" "${DEMUX_DIR}"
+
+conda activate devoir_2
 
 # 1. Contrôle de qualité sur les lectures brutes
 echo "=============================================="
 echo "Contrôle de qualité sur les lectures brutes"
 conda run -n devoir_2 fastqc -t $CPU $FASTQ -o ${Rep_dir}/results
 
-# 2. Démultiplexage des codes-barres (crée les fichiers .fq dans le dossier courant)
+# 2. Démultiplexage des codes-barres (fichiers .fq rangés dans results/demux/)
 echo "=============================================="
 echo "Démultiplexage des codes-barres"
 $SABRE se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq

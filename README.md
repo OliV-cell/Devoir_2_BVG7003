@@ -1,7 +1,7 @@
 # Automated Variant Calling Pipeline
 
 ## 1. Objective & Functionality
-This repository contains an automated Bash pipeline (`pipeline.sh`) that processes raw single-end sequencing data (FASTQ) into a functionally annotated Variant Call Format (VCF) file. It is designed to be reproducible, flexible across different datasets, and easy to run using relative paths.
+This repository contains an automated Bash pipeline (`Script/Pipeline.sh`) that processes raw single-end sequencing data (FASTQ) into a functionally annotated Variant Call Format (VCF) file. It is designed to be reproducible, flexible across different datasets, and easy to run using relative paths.
 
 The pipeline executes the following steps in order:
 1. **Raw Quality Control (`FastQC`):** Evaluates base quality, GC content, adapter content, and overrepresented sequences in raw reads.
@@ -20,10 +20,13 @@ The pipeline executes the following steps in order:
 ## 2. Repository Structure
 ```text
 .
-├── pipeline.sh          # Main automated variant calling script
+├── Script/
+│   └── Pipeline.sh      # Main automated variant calling script
+├── Tools/
+│   └── Tools_installation.md # Tool & Sabre installation instructions
+├── input_data/
+│   └── GBS_data/        # Input files (FASTQ, barcodes)
 ├── README.md            # Project documentation and usage guide
-├── WIKI.md              # Step-by-step details, warnings, and troubleshooting
-├── data/                # Example input files (FASTQ, barcodes, reference)
 └── results/             # Output directory (created automatically when run)
 ```
 
@@ -68,38 +71,39 @@ All bioinformatics tools are managed inside a single Conda environment named **`
    cd <repository-name>
    ```
 
-2. **Create the `devoir_2` Conda environment:**
+2. **Create the `devoir_2` Conda environment (and build `sabre` if on Apple Silicon):**
+   See `Tools/Tools_installation.md` for full details:
    ```bash
-   conda create -n devoir_2 -c bioconda -c conda-forge \
-       fastqc sabre cutadapt bwa samtools bcftools snpeff
+   conda create -n devoir_2 -c conda-forge -c bioconda \
+       fastqc cutadapt bwa samtools bcftools snpeff parallel
    ```
 
 3. **Make the pipeline script executable:**
    ```bash
-   chmod +x pipeline.sh
+   chmod +x Script/Pipeline.sh
    ```
 
 ---
 
 ## 5. How to Run the Pipeline
 
-Run the script from the root of the repository using **relative paths** for your three input files:
+Run the script from the root of the repository using **relative paths** for your three input files (an optional 4th argument can specify a custom path to `sabre` if not in `devoir_2` or `Tools/sabre/sabre`):
 
 ```bash
-./pipeline.sh <path/to/reads.fq.gz> <path/to/reference.fa> <path/to/barcodes.txt>
+./Script/Pipeline.sh <path/to/reads.fq.gz> <path/to/reference.fa> <path/to/barcodes.txt> [path/to/sabre]
 ```
 
 ### Example (Test Dataset)
 ```bash
-./pipeline.sh data/FC20150701_1.fq.gz data/Gmax_275_v2.0.fa data/barcodes.txt
+./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt
 ```
 
-When prompted, enter the number of CPU threads to allocate (e.g., `4`).
+CPU thread allocation is automatically set to one-third of detected system cores (minimum `1`).
 
 ### Adapting to Another Dataset
 To run the pipeline on a different organism or sequencing kit:
 * Pass your new FASTQ, reference FASTA, and barcode files as the three command-line arguments.
-* If your dataset uses a different adapter sequence or organism database, update the `ADAPTER` and `SNPEFF_DB` variables at the top of `pipeline.sh`.
+* If your dataset uses a different adapter sequence or organism database, update the `ADAPTER` and `SNPEFF_DB` variables at the top of `Script/Pipeline.sh`.
 
 ---
 
@@ -109,13 +113,11 @@ To run the pipeline on a different organism or sequencing kit:
 The script uses `set -euo pipefail`, meaning it will **stop immediately** if any command fails so that corrupted files are not passed to downstream steps. To save a complete record of both standard output and error messages to a log file (`pipeline.log`), run the script with `tee`:
 
 ```bash
-./pipeline.sh data/FC20150701_1.fq.gz data/Gmax_275_v2.0.fa data/barcodes.txt 2>&1 | tee pipeline.log
+./Script/Pipeline.sh input_data/GBS_data/FC20150701_1.fq.gz path/to/Gmax_275_v2.0.fa input_data/GBS_data/FC20150701_1.txt 2>&1 | tee pipeline.log
 ```
 
 ### Quick Troubleshooting
 * **Conda environment error:** Verify that the environment exists and is named exactly `devoir_2` by running `conda env list`.
-* **Invalid CPU prompt:** Enter a positive integer only (e.g., `2`, `4`, `8`) with no spaces or letters.
-* **SnpEff command not found:** Depending on your Conda build, the executable may be `snpeff` (lowercase) instead of `snpEff`. Check with `conda run -n devoir_2 which snpEff snpeff`.
+* **Sabre not found:** Build `sabre` in `Tools/sabre` (see `Tools/Tools_installation.md`) or pass its binary path as the 4th argument.
+* **SnpEff command not found:** The script automatically checks both `snpEff` and `snpeff` in the `devoir_2` environment.
 * **Empty VCF file:** Check alignment rates using `conda run -n devoir_2 samtools flagstat results/<sample>.sort.bam` to confirm reads mapped to the reference genome.
-
-For step-by-step descriptions, expected warnings, and detailed error fixes, refer to **`WIKI.md`**.
