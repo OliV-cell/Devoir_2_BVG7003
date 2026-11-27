@@ -1,1 +1,121 @@
-# Devoir_2_BVG7003
+# Automated Variant Calling Pipeline
+
+## 1. Objective & Functionality
+This repository contains an automated Bash pipeline (`pipeline.sh`) that processes raw single-end sequencing data (FASTQ) into a functionally annotated Variant Call Format (VCF) file. It is designed to be reproducible, flexible across different datasets, and easy to run using relative paths.
+
+The pipeline executes the following steps in order:
+1. **Raw Quality Control (`FastQC`):** Evaluates base quality, GC content, adapter content, and overrepresented sequences in raw reads.
+2. **Demultiplexing (`Sabre`):** Splits pooled sequencing reads into individual sample `.fq` files using a barcode file.
+3. **Trimming & Filtering (`Cutadapt`):** Removes adapter sequences (`AGATCGGAA`), trims low-quality 3' bases (`-q 20`), and discards reads shorter than 50 bp (`-m 50`).
+4. **Post-Trimming Quality Control (`FastQC`):** Re-evaluates read quality after trimming to verify adapter removal and quality improvement.
+5. **Reference Alignment (`BWA`):** Indexes the reference genome (`bwa index`) and aligns trimmed reads (`bwa mem`) to produce SAM files.
+6. **BAM Post-Processing (`SAMtools`):** Converts SAM to BAM, sorts alignments by genomic coordinates, and indexes the sorted BAM files.
+7. **Variant Calling (`BCFtools`):** Computes genotype likelihoods (`bcftools mpileup`) and calls SNPs and indels (`bcftools call -mv`) to generate a VCF file.
+8. **Functional Annotation (`SnpEff` - Bonus):** Downloads the specified genome database and annotates called variants with predicted functional effects.
+
+> **Note on PCR duplicates:** Duplicate removal is intentionally omitted because this workflow is tailored for GBS (Genotyping-by-Sequencing) data, where reads originating from the same restriction enzyme cut site naturally share identical start coordinates.
+
+---
+
+## 2. Repository Structure
+```text
+.
+├── pipeline.sh          # Main automated variant calling script
+├── README.md            # Project documentation and usage guide
+├── WIKI.md              # Step-by-step details, warnings, and troubleshooting
+├── data/                # Example input files (FASTQ, barcodes, reference)
+└── results/             # Output directory (created automatically when run)
+```
+
+---
+
+## 3. Input and Output Formats
+
+### Required Inputs
+* **Raw sequencing reads (`.fq.gz` or `.fastq.gz`):** Single-end raw FASTQ file.
+* **Reference genome (`.fa` or `.fasta`):** Reference genome sequence.
+* **Barcodes file (`.txt`):** Tab-delimited file mapping sample barcodes to output `.fq` filenames (standard `sabre se` format).
+
+### Generated Outputs (in `results/`)
+| File(s) | Tool | Description |
+|---|---|---|
+| `*_fastqc.html`, `*_fastqc.zip` | FastQC | Quality reports before and after trimming |
+| `unknown.fq` | Sabre | Reads whose barcodes did not match any sample |
+| `*.fastq` | Cutadapt | Adapter-trimmed and quality-filtered reads |
+| `*.sam` | BWA | Raw sequence alignments |
+| `*.bam`, `*.sort.bam`, `*.sort.bam.bai` | SAMtools | Binary, coordinate-sorted, and indexed alignments |
+| `variants.bcf` | BCFtools | Binary call format file from `mpileup` |
+| `variants.vcf` | BCFtools | Final called SNPs and indels |
+| `variants.ann.vcf`, `snpeff.html` | SnpEff | Annotated VCF and HTML summary report |
+
+---
+
+## 4. Dependencies and Installation
+
+All bioinformatics tools are managed inside a single Conda environment named **`devoir_2`**:
+* `fastqc`
+* `sabre`
+* `cutadapt`
+* `bwa`
+* `samtools`
+* `bcftools`
+* `snpeff`
+
+### Installation Steps
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd <repository-name>
+   ```
+
+2. **Create the `devoir_2` Conda environment:**
+   ```bash
+   conda create -n devoir_2 -c bioconda -c conda-forge \
+       fastqc sabre cutadapt bwa samtools bcftools snpeff
+   ```
+
+3. **Make the pipeline script executable:**
+   ```bash
+   chmod +x pipeline.sh
+   ```
+
+---
+
+## 5. How to Run the Pipeline
+
+Run the script from the root of the repository using **relative paths** for your three input files:
+
+```bash
+./pipeline.sh <path/to/reads.fq.gz> <path/to/reference.fa> <path/to/barcodes.txt>
+```
+
+### Example (Test Dataset)
+```bash
+./pipeline.sh data/FC20150701_1.fq.gz data/Gmax_275_v2.0.fa data/barcodes.txt
+```
+
+When prompted, enter the number of CPU threads to allocate (e.g., `4`).
+
+### Adapting to Another Dataset
+To run the pipeline on a different organism or sequencing kit:
+* Pass your new FASTQ, reference FASTA, and barcode files as the three command-line arguments.
+* If your dataset uses a different adapter sequence or organism database, update the `ADAPTER` and `SNPEFF_DB` variables at the top of `pipeline.sh`.
+
+---
+
+## 6. Log Files and Troubleshooting
+
+### Capturing Execution Logs
+The script uses `set -euo pipefail`, meaning it will **stop immediately** if any command fails so that corrupted files are not passed to downstream steps. To save a complete record of both standard output and error messages to a log file (`pipeline.log`), run the script with `tee`:
+
+```bash
+./pipeline.sh data/FC20150701_1.fq.gz data/Gmax_275_v2.0.fa data/barcodes.txt 2>&1 | tee pipeline.log
+```
+
+### Quick Troubleshooting
+* **Conda environment error:** Verify that the environment exists and is named exactly `devoir_2` by running `conda env list`.
+* **Invalid CPU prompt:** Enter a positive integer only (e.g., `2`, `4`, `8`) with no spaces or letters.
+* **SnpEff command not found:** Depending on your Conda build, the executable may be `snpeff` (lowercase) instead of `snpEff`. Check with `conda run -n devoir_2 which snpEff snpeff`.
+* **Empty VCF file:** Check alignment rates using `conda run -n devoir_2 samtools flagstat results/<sample>.sort.bam` to confirm reads mapped to the reference genome.
+
+For step-by-step descriptions, expected warnings, and detailed error fixes, refer to **`WIKI.md`**.
