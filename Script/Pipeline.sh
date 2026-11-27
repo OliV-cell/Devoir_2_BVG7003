@@ -13,9 +13,16 @@ done
 
 # Inputs (typed after the script name when you run it)
 # Example: ./pipeline.sh data/reads.fq.gz ref/genome.fa data/barcodes.txt
+println("Merci de entrer les inputs du pipeline: ")
+println("Direction fichier FastQ:")
 FASTQ=$1
+println("Direction fichier reference genome:")
 REF=$2
+println("Direction fichier barcodes:")
 BARCODES=$3
+println("Direction Sabre (barcode-aware demultiplexing tool) :")
+SABRE=$4
+
 ADAPTER="AGATCGGAA"
 SNPEFF_DB="Glycine_max"
 
@@ -28,7 +35,8 @@ mkdir -p ${Rep_dir}/results
 conda run -n devoir_2 fastqc -t $CPU $FASTQ -o ${Rep_dir}/results
 
 # 2. Demultiplex barcodes (creates .fq files in the current folder)
-sabre se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
+
+$SABRE se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
 
 # 3. Cut adapters and filter low-quality/short reads
 for file in *.fq; do
