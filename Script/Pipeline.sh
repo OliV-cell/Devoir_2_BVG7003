@@ -5,10 +5,20 @@ set -euo pipefail
 DATA_dir=~/input_data/GBS_data
 REF=/home/dator/refgenome/Gmax_275_v2.0.fa
 OUT=variantcalling
-CPU=4
+
+#choix du nombre de CPU
+
+while true; do
+	printf "Quelle nombre de CPU voulez vous utiliser?: " >/dev/tty
+	read -r rep </dev/tty || exit 1
+	case "$rep" in  
+		int[1-9]*[0-9]) CPU="$rep"; break ;;
+		*) echo "Veuillez entrer un nombre de CPU valide" >/dev/tty ;;
+	esac
+done
 
 #FASTQ, traitement de qualiter des séquences pre_adaptateur
-fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz -o ~/output_data/fastqc_output
+conda run -n devoir_2 fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz -o ~/output_data/fastqc_output
 
 # Vérification des 2 arguments obligatoires : FASTQ et Génome de référence
 if [[ $# -lt 2 ]]; then
