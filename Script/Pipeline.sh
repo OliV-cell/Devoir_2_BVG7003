@@ -28,7 +28,7 @@ mkdir -p ${Rep_dir}/results
 conda run -n devoir_2 fastqc -t $CPU $FASTQ -o ${Rep_dir}/results
 
 # 2. Demultiplex barcodes (creates .fq files in the current folder)
-conda run -n devoir_2 sabre se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
+sabre se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
 
 # 3. Cut adapters and filter low-quality/short reads
 for file in *.fq; do
