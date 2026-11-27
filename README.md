@@ -17,7 +17,7 @@ Le pipeline exécute les étapes suivantes dans l'ordre :
 
 ---
 
-## 2. Structure du dépôt
+## 2. Structure du dépôt final
 ```text
 Devoir_2/
 ├── LICENSE                     # Licence GNU GPL v3
