@@ -26,7 +26,7 @@ SNPEFF_DB="Glycine_max"
 mkdir -p results
 
 # 1. Quality control on raw reads
-fastqc $FASTQ -o results
+conda run -n devoir_2 fastqc $FASTQ -o results
 
 # 2. Demultiplex barcodes (creates .fq files in the current folder)
 sabre se -f $FASTQ -b $BARCODES -u results/unknown.fq
@@ -37,26 +37,26 @@ for file in *.fq; do
 done
 
 # 4. Quality control after trimming
-fastqc results/*.fastq -o results
+conda run -n devoir_2 fastqc results/*.fastq -o results
 
 # 5. Index reference genome and align reads (BWA)
-bwa index $REF
+conda run -n devoir_2 bwa index $REF
 
 for file in results/*.fastq; do
-    bwa mem $REF $file > $file.sam
+    conda run -n devoir_2 bwa mem $REF $file > $file.sam
 done
 
 # 6. Convert SAM to BAM, sort, and index (SAMtools)
 for file in results/*.sam; do
-    samtools view -bS $file > $file.bam
-    samtools sort $file.bam -o $file.sort.bam
-    samtools index $file.sort.bam
+    conda run -n samtools view -bS $file > $file.bam
+    conda run -n samtools sort $file.bam -o $file.sort.bam
+    conda run -n samtools index $file.sort.bam
 done
 
 # 7. Call variants (BCFtools)
-bcftools mpileup -Ob -f $REF results/*.sort.bam > results/variants.bcf
-bcftools call -mv -Ov results/variants.bcf > results/variants.vcf
+conda run -n devoir_2 bcftools mpileup -Ob -f $REF results/*.sort.bam > results/variants.bcf
+conda run -n devoir_2 bcftools call -mv -Ov results/variants.bcf > results/variants.vcf
 
 # 8. Annotate variants (SnpEff - Bonus)
-snpEff download $SNPEFF_DB
-snpEff -stats results/snpeff.html $SNPEFF_DB results/variants.vcf > results/variants.ann.vcf
+conda run -n devoir_2 snpeff download $SNPEFF_DB
+conda run -n devoir_2 snpeff -stats results/snpeff.html $SNPEFF_DB results/variants.vcf > results/variants.ann.vcf
