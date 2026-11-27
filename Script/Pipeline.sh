@@ -2,15 +2,31 @@
 
 #path
 
-
-#Demultiplex les code bar
 DATA=/path/to/fastq
 BARCODE=/path/to/barcode
 TOOL=path/to/sabre
+
+DATA=/home/dator/NGS
+REF=/home/dator/refgenome/Gmax_275_v2.0.fa
+CPU=3
+THR=2
+BWA=/home/dator/bwa/bwa
+
+
+DATA=/home/dator/NGS/bamlist
+REF=/home/dator/refgenome/Gmax_275_v2.0.fa
+OUT=variantcalling
+CPU=4
+
+#FASTQ, traitement de qualiter des séquences pre_adaptateur
+
+fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz
+
+#Demultiplex les code bar
 exec &> sabre.log
 
 $TOOL se -f $DATA -b $BARCODE -u unk.fastq
-
+	
 #Coupe les adpatateur et code bar
 cd NGS
 ADAP=AGATCGGAA
@@ -22,16 +38,12 @@ parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed '
 			exit 1
 	fi
 
-#FASTQ, traitement de qualiter des séquences
+#FASTQ, traitement de qualiter des séquences post_adaptateur
 
+fastqc ~/input_data/GBS_data/
 
 
 #mapping des read sur le génome de référence
-DATA=/home/dator/NGS
-REF=/home/dator/refgenome/Gmax_275_v2.0.fa
-CPU=3
-THR=2
-BWA=/home/dator/bwa/bwa
 
 exec &> bwa.log
 cd $DATA
