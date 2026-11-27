@@ -1,22 +1,13 @@
 #!/bin/bash
 
 #path
-
 DATA_dir=~/input_data/GBS_data
-TOOL=path/to/sabre
 REF=/home/dator/refgenome/Gmax_275_v2.0.fa
-CPU=3
-THR=2
-BWA=/home/dator/bwa/bwa
-
-
-
 OUT=variantcalling
 CPU=4
 
 #FASTQ, traitement de qualiter des séquences pre_adaptateur
-
-fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz
+fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz -o ~/output_data/fastqc_output
 
 while true; do
 	printf "Inspect the fastqc report, is everything in order? [y/n]: " >/dev/tty
@@ -29,10 +20,9 @@ while true; do
 done
 
 #Demultiplex les code bar
-
 exec &> sabre.log
 
-$TOOL se -f $DATA -b $BARCODE -u unk.fastq
+conda run -n ngs_gbs sabre se -f "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/FC20150701_1.fq.gz" -b "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/FC20150701_1.txt" -u "/Users/olivier_v/Desktop/Devoir_BVG_7003/Devoir_2/input_data/GBS_data/unk.fastq"
 	
 #Coupe les adpatateur et code bar
 cd NGS
