@@ -155,5 +155,6 @@ bcftools call -mv variants.bcf > variants.vcf
 
 
 #SnpEff, annotation du génome
-snpEff databases | grep -i glycine
-snpEff -v -stats variants.snpeff.html DATABASE_ID variants.vcf > variants.ann.vcf
+snpEff download Glycine_max
+DB=Glycine_max
+snpEff -v -stats ann/snpeff.html "$DB" vcf/variants.vcf > ann/variants.ann.vcf
