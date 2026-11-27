@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-<<<<<<< HEAD
 #path
 DATA_dir=~/input_data/GBS_data
 REF=/home/dator/refgenome/Gmax_275_v2.0.fa
@@ -10,7 +9,7 @@ CPU=4
 
 #FASTQ, traitement de qualiter des séquences pre_adaptateur
 fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz -o ~/output_data/fastqc_output
-=======
+
 # Vérification des 2 arguments obligatoires : FASTQ et Génome de référence
 if [[ $# -lt 2 ]]; then
     echo "Usage: $0 <reads.fq.gz> <ref.fa> [barcodes.txt] [snpeff_db] [adaptateur]"
@@ -31,7 +30,6 @@ mkdir -p "$OUT"/{qc,demux,trimmed,bam,vcf,logs}
 
 # 1. Contrôle de qualité (QC) des données brutes
 fastqc -t "$CPU" -o "$OUT/qc" "$FASTQ" &> "$OUT/logs/1_fastqc_raw.log"
->>>>>>> 3d9b5edcc00c54e51f4d2a0134fbdcb4a46c1836
 
 # 2. Démultiplexage (si fichier de codes-barres fourni) + Découpage/Filtrage
 if [[ -n "$BARCODES" ]]; then
@@ -41,7 +39,6 @@ else
     INPUTS=("$FASTQ")
 fi
 
-<<<<<<< HEAD
 #Demultiplex les code bar
 exec &> sabre.log
 
@@ -57,7 +54,7 @@ parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed '
 			printf There is error in the cutadapt
 			exit 1
 	fi
-=======
+
 parallel -j "$CPU" "cutadapt -a $ADAPTER -q 20 -m 50 -o $OUT/trimmed/{/.}.fastq {}" ::: "${INPUTS[@]}" &> "$OUT/logs/2_cutadapt.log"
 fastqc -t "$CPU" -o "$OUT/qc" "$OUT"/trimmed/*.fastq &> "$OUT/logs/2_fastqc_trimmed.log"
 
@@ -68,7 +65,6 @@ fastqc -t "$CPU" -o "$OUT/qc" "$OUT"/trimmed/*.fastq &> "$OUT/logs/2_fastqc_trim
 parallel -j "$CPU" \
     "bwa mem -t 2 $REF {} | samtools sort -o $OUT/bam/{/.}.bam - && samtools index $OUT/bam/{/.}.bam" \
     ::: "$OUT"/trimmed/*.fastq &> "$OUT/logs/3_align_sort.log"
->>>>>>> 3d9b5edcc00c54e51f4d2a0134fbdcb4a46c1836
 
 # 5. Appel de variants (BCFtools)
 bcftools mpileup -Ou -f "$REF" "$OUT"/bam/*.bam 2> "$OUT/logs/5_mpileup.log" | \
