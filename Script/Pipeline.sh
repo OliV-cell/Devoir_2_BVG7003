@@ -2,19 +2,15 @@
 
 #path
 
-DATA=/path/to/fastq
-BARCODE=/path/to/barcode
+DATA_dir=~/input_data/GBS_data
 TOOL=path/to/sabre
-
-DATA=/home/dator/NGS
 REF=/home/dator/refgenome/Gmax_275_v2.0.fa
 CPU=3
 THR=2
 BWA=/home/dator/bwa/bwa
 
 
-DATA=/home/dator/NGS/bamlist
-REF=/home/dator/refgenome/Gmax_275_v2.0.fa
+
 OUT=variantcalling
 CPU=4
 
@@ -22,14 +18,25 @@ CPU=4
 
 fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz
 
+while true; do
+	printf "Inspect the fastqc report, is everything in order? [y/n]: " >/dev/tty
+	read -r rep </dev/tty || exit 1
+	case "$rep" in
+		[yY]*) break ;;
+		[nN]*) echo "Pipeline aborted"; exit 0 ;;
+		*) echo "Please answer y or n" >/dev/tty ;;
+	esac
+done
+
 #Demultiplex les code bar
+
 exec &> sabre.log
 
 $TOOL se -f $DATA -b $BARCODE -u unk.fastq
 	
 #Coupe les adpatateur et code bar
 cd NGS
-ADAP=AGATCGGAA
+ADAP=AGATCGGAA 
 exec &> cutadapt.log
 parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed 's/.fq//')
 	if [ $? -ne 0 ]
@@ -40,7 +47,20 @@ parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed '
 
 #FASTQ, traitement de qualiter des séquences post_adaptateur
 
+
+
 fastqc ~/input_data/GBS_data/
+
+while true; do
+	printf "Inspect the fastqc report, is everything in order? [y/n]: " >/dev/tty
+	read -r rep </dev/tty || exit 1
+	case "$rep" in
+		[yY]*) break ;;
+		[nN]*) echo "Pipeline aborted"; exit 0 ;;
+		*) echo "Please answer y or n" >/dev/tty ;;
+	esac
+done
+
 
 
 #mapping des read sur le génome de référence
