@@ -11,16 +11,17 @@ while true; do
 	esac
 done
 
-# Inputs (typed after the script name when you run it)
-# Example: ./pipeline.sh data/reads.fq.gz ref/genome.fa data/barcodes.txt
-println("Merci de entrer les inputs du pipeline: ")
-println("Direction fichier FastQ:")
+# Entrées (passées en arguments après le nom du script lors de l'exécution)
+# Exemple : ./Pipeline.sh data/reads.fq.gz ref/genome.fa data/barcodes.txt /chemin/vers/sabre
+
+echo "Merci d'entrer les entrées du pipeline :"
+echo "Chemin du fichier FastQ :"
 FASTQ=$1
-println("Direction fichier reference genome:")
+echo "Chemin du fichier du génome de référence :"
 REF=$2
-println("Direction fichier barcodes:")
+echo "Chemin du fichier de codes-barres :"
 BARCODES=$3
-println("Direction Sabre (barcode-aware demultiplexing tool) :")
+echo "Chemin vers Sabre (outil de démultiplexage par codes-barres) :"
 SABRE=$4
 
 ADAPTER="AGATCGGAA"
@@ -28,42 +29,56 @@ SNPEFF_DB="Glycine_max"
 
 Rep_dir=$(pwd)
 
-# Create a folder for all results
+# Créer un dossier pour tous les résultats
 mkdir -p ${Rep_dir}/results
 
-# 1. Quality control on raw reads
+# 1. Contrôle de qualité sur les lectures brutes
+echo "=============================================="
+echo "Contrôle de qualité sur les lectures brutes"
 conda run -n devoir_2 fastqc -t $CPU $FASTQ -o ${Rep_dir}/results
 
-# 2. Demultiplex barcodes (creates .fq files in the current folder)
-
+# 2. Démultiplexage des codes-barres (crée les fichiers .fq dans le dossier courant)
+echo "=============================================="
+echo "Démultiplexage des codes-barres"
 $SABRE se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
 
-# 3. Cut adapters and filter low-quality/short reads
+# 3. Coupure des adaptateurs et filtrage des lectures courtes ou de faible qualité
+echo "=============================================="
 for file in *.fq; do
     conda run -n devoir_2 cutadapt -a $ADAPTER -q 20 -m 50 -o ${Rep_dir}/results/$file.fastq $file
 done
 
-# 4. Quality control after trimming
+# 4. Contrôle de qualité après découpage
+echo "=============================================="
+echo "Contrôle de qualité sur les lectures sans adaptateur"
 conda run -n devoir_2 fastqc -t $CPU ${Rep_dir}/results/*.fastq -o ${Rep_dir}/results
 
-# 5. Index reference genome and align reads (BWA)
+# 5. Indexation du génome de référence et alignement des lectures (BWA)
+echo "=============================================="
+echo "Indexation du génome de référence et alignement des lectures"
 conda run -n devoir_2 bwa index $REF
 
+echo "=============================================="
+echo "Mapping des lectures"
 for file in ${Rep_dir}/results/*.fastq; do
     conda run -n devoir_2 bwa mem -t $CPU $REF $file > $file.sam
 done
 
-# 6. Convert SAM to BAM, sort, and index (SAMtools)
+# 6. Conversion SAM vers BAM, tri et indexation (SAMtools)
+echo "=============================================="
+echo "Conversion SAM vers BAM, tri et indexation"
 for file in ${Rep_dir}/results/*.sam; do
     conda run -n devoir_2 samtools view -bS $file > $file.bam
     conda run -n devoir_2 samtools sort -@ $CPU $file.bam -o $file.sort.bam
     conda run -n devoir_2 samtools index $file.sort.bam
 done
 
-# 7. Call variants (BCFtools)
+# 7. Appel de variants (BCFtools)
+echo "=============================================="
 conda run -n devoir_2 bcftools mpileup -Ob -f $REF ${Rep_dir}/results/*.sort.bam > ${Rep_dir}/results/variants.bcf
 conda run -n devoir_2 bcftools call -mv -Ov ${Rep_dir}/results/variants.bcf > ${Rep_dir}/results/variants.vcf
 
-# 8. Annotate variants (SnpEff - Bonus)
+# 8. Annotation des variants (SnpEff - Bonus)
+echo "=============================================="
 conda run -n devoir_2 snpEff download $SNPEFF_DB
 conda run -n devoir_2 snpEff -stats ${Rep_dir}/results/snpeff.html $SNPEFF_DB ${Rep_dir}/results/variants.vcf > ${Rep_dir}/results/variants.ann.vcf
