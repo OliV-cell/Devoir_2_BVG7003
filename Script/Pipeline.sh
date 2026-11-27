@@ -1,160 +1,55 @@
 #!/bin/bash
+set -euo pipefail
 
-#path
+# Vérification des 2 arguments obligatoires : FASTQ et Génome de référence
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 <reads.fq.gz> <ref.fa> [barcodes.txt] [snpeff_db] [adaptateur]"
+    exit 1
+fi
 
-DATA_dir=~/input_data/GBS_data
-TOOL=path/to/sabre
-REF=/home/dator/refgenome/Gmax_275_v2.0.fa
-CPU=3
-THR=2
-BWA=/home/dator/bwa/bwa
-
-
-
-OUT=variantcalling
+# Paramètres (chemins relatifs et valeurs par défaut flexibles)
+FASTQ="$1"
+REF="$2"
+BARCODES="${3:-}"
+SNPEFF_DB="${4:-}"
+ADAPTER="${5:-AGATCGGAAGAGC}"
+OUT="results"
 CPU=4
 
-#FASTQ, traitement de qualiter des séquences pre_adaptateur
+# Création des dossiers de sortie
+mkdir -p "$OUT"/{qc,demux,trimmed,bam,vcf,logs}
 
-fastqc ~/input_data/GBS_data/FC20150701_1.fq.gz
+# 1. Contrôle de qualité (QC) des données brutes
+fastqc -t "$CPU" -o "$OUT/qc" "$FASTQ" &> "$OUT/logs/1_fastqc_raw.log"
 
-while true; do
-	printf "Inspect the fastqc report, is everything in order? [y/n]: " >/dev/tty
-	read -r rep </dev/tty || exit 1
-	case "$rep" in
-		[yY]*) break ;;
-		[nN]*) echo "Pipeline aborted"; exit 0 ;;
-		*) echo "Please answer y or n" >/dev/tty ;;
-	esac
-done
+# 2. Démultiplexage (si fichier de codes-barres fourni) + Découpage/Filtrage
+if [[ -n "$BARCODES" ]]; then
+    (cd "$OUT/demux" && sabre se -f "$(realpath "$FASTQ")" -b "$(realpath "$BARCODES")" -u unk.fq) &> "$OUT/logs/2_sabre.log"
+    INPUTS=("$OUT"/demux/*.fq)
+else
+    INPUTS=("$FASTQ")
+fi
 
-#Demultiplex les code bar
+parallel -j "$CPU" "cutadapt -a $ADAPTER -q 20 -m 50 -o $OUT/trimmed/{/.}.fastq {}" ::: "${INPUTS[@]}" &> "$OUT/logs/2_cutadapt.log"
+fastqc -t "$CPU" -o "$OUT/qc" "$OUT"/trimmed/*.fastq &> "$OUT/logs/2_fastqc_trimmed.log"
 
-exec &> sabre.log
+# 3 & 4. Indexation (si absente), Alignement (BWA) et Post-traitement (SAMtools)
+[[ ! -f "${REF}.bwt" ]] && bwa index "$REF" &> "$OUT/logs/3_bwa_index.log"
+[[ ! -f "${REF}.fai" ]] && samtools faidx "$REF"
 
-$TOOL se -f $DATA -b $BARCODE -u unk.fastq
-	
-#Coupe les adpatateur et code bar
-cd NGS
-ADAP=AGATCGGAA 
-exec &> cutadapt.log
-parallel -j 4 cutadapt -a $ADAP -m 50 -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed 's/.fq//')
-	if [ $? -ne 0 ]
-		then
-			printf There is error in the cutadapt
-			exit 1
-	fi
+parallel -j "$CPU" \
+    "bwa mem -t 2 $REF {} | samtools sort -o $OUT/bam/{/.}.bam - && samtools index $OUT/bam/{/.}.bam" \
+    ::: "$OUT"/trimmed/*.fastq &> "$OUT/logs/3_align_sort.log"
 
-#FASTQ, traitement de qualiter des séquences post_adaptateur
+# 5. Appel de variants (BCFtools)
+bcftools mpileup -Ou -f "$REF" "$OUT"/bam/*.bam 2> "$OUT/logs/5_mpileup.log" | \
+    bcftools call -mv -Ov -o "$OUT/vcf/variants.vcf" 2> "$OUT/logs/5_call.log"
 
+# 6. Annotation fonctionnelle (SnpEff - bonus optionnel)
+if [[ -n "$SNPEFF_DB" ]]; then
+    snpEff download "$SNPEFF_DB" &> "$OUT/logs/6_snpeff_dl.log" || true
+    snpEff -stats "$OUT/vcf/snpeff.html" "$SNPEFF_DB" "$OUT/vcf/variants.vcf" \
+        > "$OUT/vcf/variants.ann.vcf" 2> "$OUT/logs/6_snpeff.log"
+fi
 
-
-fastqc ~/input_data/GBS_data/
-
-while true; do
-	printf "Inspect the fastqc report, is everything in order? [y/n]: " >/dev/tty
-	read -r rep </dev/tty || exit 1
-	case "$rep" in
-		[yY]*) break ;;
-		[nN]*) echo "Pipeline aborted"; exit 0 ;;
-		*) echo "Please answer y or n" >/dev/tty ;;
-	esac
-done
-
-
-
-#mapping des read sur le génome de référence
-
-exec &> bwa.log
-cd $DATA
-		parallel -j $CPU $BWA mem -t $THR $REF {}.fastq ">" {}.sam ::: $(ls -1 *.fastq | sed 's/.fastq//')
-		if [ $? -ne 0 ]
-			then 
-				printf There is a problem in the alignment step
-				exit 1
-		fi
-
-
-#conversiton Sam -> Bam
-
-CPU=4
-
-cd NGS
-# create a log file
-exec &> convert.log
-
-# convert SAM format to BAM format
-
-parallel -j $CPU samtools view -b -S -h {}.sam ">" {}.temp.bam ::: $(ls -1 *.sam | sed 's/.sam//')
-		if [ $? -ne 0 ]
-			then 
-				printf "There is a problem in the samtools-view step"
-				exit 1
-		fi
-# sort BAM files
-
-parallel -j $CPU samtools sort {}.temp.bam -o {}.sort.bam ::: $(ls -1 *.temp.bam | sed 's/.temp.bam//')
-		if [ $? -ne 0 ]
-			then 
-				printf "There is a problem in the samtools-sort step"
-				exit 1
-		fi
-
-# indexing of BAM files
-parallel -j $CPU samtools index {} ::: $(ls -1 *.sort.bam)
-		if [ $? -ne 0 ]
-			then 
-				printf "There is a problem in the samtools-index step"
-				exit 1
-		fi
-
-# create a list of BAM files with path
-
-for i in $(ls -1 *.sort.bam)
-			do
-				printf "$PWD/${i}\n" >> "bamlist"
-				if [ $? -ne 0 ]
-					then 
-					printf "There is a problem in the production of the bam file list"
-					exit 1
-				fi
-			done
-
-
-
-#BCF tools, appelle des variants
-
-
-DATA=/home/dator/NGS/bamlist
-REF=/home/dator/refgenome/Gmax_275_v2.0.fa
-OUT=variantcalling
-CPU=4
-
-mkdir results1
-cd results1
-
-exec &> samt_var.log
-
-samtools mpileup -g -f $REF -b $DATA > variants.bcf
-
-	if [ $? -ne 0 ]
-                        then
-                                printf "There is a problem at the samtools_mpileup step"
-                                exit 1
-                fi
-
-
-bcftools call -mv variants.bcf > variants.vcf
-
-	if [ $? -ne 0 ]
-                        then
-                                printf "There is a problem at the bcf2vcf step"
-                                exit 1
-                fi
-
-
-
-#SnpEff, annotation du génome
-snpEff download Glycine_max
-DB=Glycine_max
-snpEff -v -stats ann/snpeff.html "$DB" vcf/variants.vcf > ann/variants.ann.vcf
+echo "Terminé ! Fichiers générés dans : $OUT/"
