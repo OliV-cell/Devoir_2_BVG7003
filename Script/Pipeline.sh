@@ -12,7 +12,7 @@ while true; do
 	printf "Quelle nombre de CPU voulez vous utiliser?: " >/dev/tty
 	read -r rep </dev/tty || exit 1
 	case "$rep" in  
-		int[1-9]*[0-9]) CPU="$rep"; break ;;
+		[1-9]*[0-9]) CPU="$rep"; break ;;
 		*) echo "Veuillez entrer un nombre de CPU valide" >/dev/tty ;;
 	esac
 done
