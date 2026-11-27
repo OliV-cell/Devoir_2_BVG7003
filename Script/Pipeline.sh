@@ -22,32 +22,36 @@ BARCODES=$3
 ADAPTER="AGATCGGAA"
 SNPEFF_DB="Glycine_max"
 
+Rep_dir=pwd
+
+cd $Rep_dir
+
 # Create a folder for all results
-mkdir -p results
+mkdir -p ${Rep_dir}/results
 
 # 1. Quality control on raw reads
-conda run -n devoir_2 fastqc $FASTQ -o results
+conda run -n devoir_2 fastqc $FASTQ -o ${Rep_dir}/results
 
 # 2. Demultiplex barcodes (creates .fq files in the current folder)
-sabre se -f $FASTQ -b $BARCODES -u results/unknown.fq
+sabre se -f $FASTQ -b $BARCODES -u ${Rep_dir}/results/unknown.fq
 
 # 3. Cut adapters and filter low-quality/short reads
 for file in *.fq; do
-    cutadapt -a $ADAPTER -q 20 -m 50 -o results/$file.fastq $file
+    conda run -n devoir_2 cutadapt -a $ADAPTER -q 20 -m 50 -o ${Rep_dir}/results/$file.fastq $file
 done
 
 # 4. Quality control after trimming
-conda run -n devoir_2 fastqc results/*.fastq -o results
+conda run -n devoir_2 fastqc ${Rep_dir}/results/*.fastq -o ${Rep_dir}/results
 
 # 5. Index reference genome and align reads (BWA)
 conda run -n devoir_2 bwa index $REF
 
-for file in results/*.fastq; do
+for file in ${Rep_dir}/results/*.fastq; do
     conda run -n devoir_2 bwa mem $REF $file > $file.sam
 done
 
 # 6. Convert SAM to BAM, sort, and index (SAMtools)
-for file in results/*.sam; do
+for file in ${Rep_dir}/results/*.sam; do
     conda run -n samtools view -bS $file > $file.bam
     conda run -n samtools sort $file.bam -o $file.sort.bam
     conda run -n samtools index $file.sort.bam
