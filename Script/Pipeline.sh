@@ -30,7 +30,7 @@ echo "Nombre de CPU détectés : $NB_CPU"
 echo "Nombre de CPU utilisés pour l'analyse : $CPU"
 
 # Entrées (passées en arguments après le nom du script lors de l'exécution)
-# Exemple : ./Pipeline.sh ../input_data/GBS_data/FC20150701_1.fq.gz ref/genome.fa ../input_data/GBS_data/FC20150701_1.txt ../Tools/sabre/sabre
+# Exemple : ./Pipeline.sh ../input_data/GBS_data/FC20150701_1.fq.gz ref/genome.fa ../input_data/GBS_data/FC20150701_1.txt ../Tools/sabre/sabre AGATCGGAA Glycine_max
 abs_path() {
     echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 }
@@ -44,8 +44,9 @@ else
     SABRE="$4"
 fi
 
-ADAPTER="AGATCGGAA"
-SNPEFF_DB="Glycine_max"
+# Adaptateur Illumina ($5) et base de données SnpEff ($6) — valeurs par défaut modifiables au besoin
+ADAPTER="${5:-AGATCGGAA}"
+SNPEFF_DB="${6:-Glycine_max}"
 
 # Dossiers de sortie toujours créés à la racine du projet (en dehors de Script/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
