@@ -99,7 +99,15 @@ Tous les outils bioinformatiques sont gérés dans un seul environnement Conda n
        fastqc cutadapt bwa samtools bcftools snpeff parallel
    ```
 
-3. **Rendre le script exécutable :**
+3. **Télécharger le génome de référence (*Glycine max*) :**
+
+   > [!IMPORTANT]
+   > **Le génome de référence (`.fa`, ~1 Go) n'est pas inclus dans ce dépôt** en raison de la limite de taille de fichiers sur GitHub (100 Mo). **Vous devez obligatoirement le télécharger avant d'exécuter le pipeline.**
+   >
+   > - **Source recommandée (compatible avec la base SnpEff `Glycine_max`) :** téléchargez le génome *Glycine max* (`dna.toplevel.fa.gz`) sur [Ensembl Plants — *Glycine max*](https://plants.ensembl.org/Glycine_max/Info/Index) (ou récupérez le fichier `Gmax_275_v2.0.fa` fourni dans le cadre du cours).
+   > - Décompressez l'archive (`gunzip <fichier>.fa.gz`) et placez le fichier `.fa` dans le dossier de votre choix (par exemple `input_data/GBS_data/` — les fichiers `*.fa` et leurs index BWA sont automatiquement ignorés par `.gitignore`).
+
+4. **Rendre le script exécutable :**
    ```bash
    chmod +x Script/Pipeline.sh
    ```
